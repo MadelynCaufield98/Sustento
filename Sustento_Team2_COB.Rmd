@@ -1,0 +1,184 @@
+#ENERGY METRICS
+#Source energy: metric used for determining Star Score
+##represents the total amount of raw fuel that is required to operate the building. takes all energy use into account
+#Site energy: amount of heat and electricity consumed by a building as reflected in your utility bills
+# Weather normalized energy: the energy your building would have used under average conditions 
+#WATER METRICS
+
+
+```{r}
+getwd()
+setwd("/Users/madelyncaufield/Desktop/Sustainability Project")
+df.raw = read.csv(file = "Existing_Buildings_Energy___Water_Efficiency__EBEWE__Program.csv")
+head(df.raw)
+names(df.raw)
+sum(is.na(df.raw)) #95296 na's. might want to remove. 
+```
+
+```{r}
+dff = na.omit(df.raw) #omitting NAs
+anyNA(dff)
+dff
+
+df.NoNA=dff[-which(dff$TOTAL.WATER.USE..kgal..=="Not Available"),]
+
+
+
+```
+
+```{r}
+library(plyr)
+
+dff[which(dff$PROGRAM.YEAR == 2016), ] 
+df.2016 = dff[which(dff$PROGRAM.YEAR == 2016), ] 
+df.2016
+df = data.frame(df.2016)
+df
+df.new<-df[c("Source.EUI..kBtu.ft..", "LADBS.Building.Category")]
+df.new
+head(df.new)
+
+library(mltools)
+df.new[, "energy.source.2"] <- bin_data(df.new$Source.EUI..kBtu.ft.., bins=3, binType = "quantile")
+df.new #bins with equal number observations in each group
+
+df.new.order = order(df.new$energy.source.2) 
+df.new[df.new.order,]
+df = df.new[df.new.order,] 
+
+count(df.NoNA$LADBS.Building.Category)
+count(df.NoNA$Source.EUI..kBtu.ft..)
+
+library(devtools)
+library(easyGgplot2)
+source.energy.num = as.numeric(df.new$TOTAL.WATER.USE..kgal.)
+energyplot = ggplot2.barplot(data=df.new, xName = 'LADBS.Building.Category', yName = 'source.energy.num',
+                orientation="horizontal")
+print(energyplot + labs(y="Total Water Use (kgal) 2019", x = "LADBS Building Category 2019"))
+
+susn101=df.new[which(df.new$LADBS.Building.Category=="100,000+ sqft"),]
+susn102=df.new[which(df.new$LADBS.Building.Category=="100,000+ sqft (CITY OWNED BUILDINGS)"),]
+susn103=df.new[which(df.new$LADBS.Building.Category=="15,000 to 19,999 sqft (CITY OWNED BUILDING)"),]
+susn104=df.new[which(df.new$LADBS.Building.Category=="20,000 to 49,999 sqft"),]
+susn105=df.new[which(df.new$LADBS.Building.Category=="20,000 to 49,999 sqft (CITY OWNED BUILDINGS)"),]
+susn106=df.new[which(df.new$LADBS.Building.Category=="50,000 to 99,999 sqft"),]
+susn107=df.new[which(df.new$LADBS.Building.Category=="50,000 to 99,999 sqft (CITY OWNED BUILDINGS)"),]
+susn108=df.new[which(df.new$LADBS.Building.Category=="7,500 to 14,999 sqft (CITY OWNED BUILDING)"),]
+
+susn101$Source.EUI..kBtu.ft..=as.numeric(susn101$TOTAL.WATER.USE..kgal.)
+susn102$Source.EUI..kBtu.ft..=as.numeric(susn102$TOTAL.WATER.USE..kgal.)
+susn103$Source.EUI..kBtu.ft..=as.numeric(susn103$TOTAL.WATER.USE..kgal.)
+susn104$Source.EUI..kBtu.ft..=as.numeric(susn104$TOTAL.WATER.USE..kgal.)
+susn105$Source.EUI..kBtu.ft..=as.numeric(susn105$TOTAL.WATER.USE..kgal.)
+susn106$Source.EUI..kBtu.ft..=as.numeric(susn106$TOTAL.WATER.USE..kgal.)
+susn107$Source.EUI..kBtu.ft..=as.numeric(susn107$TOTAL.WATER.USE..kgal.)
+susn108$Source.EUI..kBtu.ft..=as.numeric(susn108$STOTAL.WATER.USE..kgal.)
+
+par(mfrow=c(3,3))
+hist(susn101$Source.EUI..kBtu.ft..,main="100,000+ sqft", breaks = 25, xlab = "Total Water Use (kgal) 2019")
+hist(susn102$Source.EUI..kBtu.ft..,main="100,000+ sqft (CITY OWNED BUILDINGS)", breaks = 25, xlab = "Total Water Use (kgal) 2019")
+hist(susn103$Source.EUI..kBtu.ft..,main="15,000 to 19,999 sqft (CITY OWNED BUILDING)", breaks = 25, xlab = "Total Water Use (kgal) 2019")
+hist(susn104$Source.EUI..kBtu.ft..,main="20,000 to 49,999 sqft", breaks = 25, xlab = "Total Water Use (kgal) 2019")
+hist(susn105$Source.EUI..kBtu.ft..,main="20,000 to 49,999 sqft (CITY OWNED BUILDINGS)", breaks = 25, xlab = "Total Water Use (kgal) 2019")
+hist(susn106$Source.EUI..kBtu.ft..,main="50,000 to 99,999 sqft", breaks = 25, xlab = "Total Water Use (kgal) 2019")
+hist(susn107$Source.EUI..kBtu.ft..,main="50,000 to 99,999 sqft (CITY OWNED BUILDINGS)", breaks = 25, xlab = "Total Water Use (kgal) 2019")
+hist(susn108$Source.EUI..kBtu.ft..,main="7,500 to 14,999 sqft (CITY OWNED BUILDING", breaks = 25, xlab = "Total Water Use (kgal) 2019")
+```
+
+```{r}
+df.2016.order = order(df.2016$Source.EUI..kBtu.ft..) 
+df.2016[df.2016.order,]
+df = df.2016[df.2016.order,] #source energy use intensity in order from least to greatest
+
+library(psych)
+library("ggplot2")
+library(devtools)
+library(corrplot)
+library(lattice)
+library(car)
+library(pastecs)
+require(qqplotr)
+library(effects)
+library(lattice)
+library(foreign)
+library(car)
+require(stats)
+require(stats4)
+library(KernSmooth)
+library(fastICA)
+library(cluster)
+library(leaps)
+library(mgcv)
+library(rpart)
+library(pan)
+library(mgcv)
+library(DAAG)
+library(MASS)
+
+p1 = powerTransform(Source.EUI..kBtu.ft.. ~ 1, data = df.2016, family = "bcPower")
+
+
+transformed_energy = bcPower(with(df.2016, Source.EUI..kBtu.ft..),
+                       coef(p1, round = TRUE))
+transformed_energy
+plot(transformed_LotArea)
+```
+
+
+```{r}
+library(devtools)
+library(easyGgplot2)
+
+ 
+head(df.NoNA)
+table(df.NoNA$PROPERTY.TYPE)
+table(df.NoNA$Source.EUI..kBtu.ft..)
+
+df = data.frame(df.NoNA)
+df.new<-df[c("Source.EUI..kBtu.ft..", "PROPERTY.TYPE")]
+df.new
+head(df.new)
+ggplot2.barplot(data=df.new, xName = 'PROPERTY.TYPE', yName = 'Source.EUI..kBtu.ft..',
+                orientation="horizontal")
+
+library(mltools)
+df.new[, "energy.source.2"] <- bin_data(df.new$Source.EUI..kBtu.ft.., bins=3, binType = "quantile")
+df.new #bins with equal number observations in each group
+
+df.new.order = order(df.new$energy.source.2) 
+df.new[df.new.order,]
+df = df.new[df.new.order,] 
+
+library("writexl")
+write_xlsx(df,"/Users/madelyncaufield/Desktop/Sustainability Project\\prop_energy.xlsx")
+
+```
+
+```{r}
+library(corrplot)
+C02 = as.numeric(df.NoNA$CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e.)
+Source.energy = as.numeric(df.NoNA$Source.EUI..kBtu.ft..)
+corrplot(cor(df.NoNA[c('CO2', 'source.energy')]))
+numeric_col <- sapply(df.NoNA, is.numeric)
+CO2_numeric <- df.NoNA[, numeric_col]
+Correlation <- cor(CO2_numeric, use="pairwise.complete.obs")
+corrplot(Correlation)
+
+
+
+df.cor = cor(df.new)
+df.cor
+corrplot(df.cor, tl.cex=0.8, tl.srt=20, tl.col="black")
+```
+
+```{r}
+df.new %>%
+  filter(ENERGY.STAR.SCORE > 74)
+df.new[df.new$ENERGY.STAR.SCORE > 74, ]
+
+library("writexl")
+write_xlsx(df,"/Users/madelyncaufield/Desktop/Sustainability Project\\prop_energy.xlsx")
+
+library("readxl")
+read_excel("/Users/madelyncaufield/Desktop/Sustainability Project\\prop_energy.xlsx")
+```

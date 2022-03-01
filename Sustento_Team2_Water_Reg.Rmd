@@ -1,0 +1,237 @@
+---
+title: "Sustento/MAE Basic Multiple Regression on Total Water"
+author: "Madelyn Caufield"
+output: pdf_document
+fontsize: 10pt
+---
+```{r, echo=FALSE, warning=FALSE, message= FALSE}
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=60))
+```
+
+```{r}
+getwd()
+setwd("/Users/madelyncaufield/Desktop/Sustainability Project")
+df.raw = read.csv(file = "Existing_Buildings_Energy___Water_Efficiency__EBEWE__Program.csv")
+SB535 <- read.csv("SB535.csv")
+head(df.raw)
+names(df.raw)
+sum(is.na(df.raw)) #95296 na's. might want to remove. 
+
+SB535 <- read.csv("SB535.csv")
+```
+
+# cleaning and observing data
+```{r}
+require(plyr)
+
+df.clean = na.omit(df.raw) #omitting NAs
+anyNA(df.clean)
+head(df.clean)
+
+sapply(df.clean, class) #class of each column
+
+cols.num <- c(3, 5, 6, 7, 12, 13, 14, 17, 21, 22, 23, 24, 25, 27) #converting character variables to numeric
+df.clean[cols.num] <- sapply(df.clean[cols.num],as.numeric)
+sapply(df.clean, class)
+anyNA(df.clean)
+sum(is.na(df.clean)) #shows 68491 NA's do not remove yet because randomly parsed throughout dataset
+
+names(df.clean)[names(df.clean) == "POSTAL.CODE"] <- "zip" #renaming variable "POSTAL.CODE", "zip"
+
+library(dplyr) 
+df.clean %>% 
+  group_by(COMPLIANCE.STATUS) %>%
+  tally()
+df.clean %>% 
+  group_by(ENTITY.RESPONSIBLE.FOR.BENCHMARK) %>%
+  tally()
+df.clean %>% 
+  group_by(NUMBER.OF.BUILDINGS) %>%
+  tally()
+df.clean %>% 
+  group_by(zip) %>%
+  tally()
+df.clean %>% 
+  group_by(PROGRAM.YEAR) %>%
+  tally()
+df.clean %>% 
+  group_by(PROPERTY.TYPE) %>%
+  tally()
+df.clean %>% 
+  group_by(YEAR.BUILT) %>%
+  tally()
+df.clean %>% 
+  group_by(LADBS.Building.Category) %>%
+  tally()
+```
+
+# converting to categorical
+```{r}
+require(tidyverse)
+
+cols.factor <- c(4, 19, 20, 28) #converting character variables to factor
+df.clean[cols.factor] <- sapply(df.clean[cols.factor],as.factor)
+sapply(df.clean, class)
+
+#df.clean$COMPLIANCE.STATUS2 = revalue(df.clean$COMPLIANCE.STATUS, c("COMPLIED" = "1", "NOT COMPLIED" = "2")) #making variables categorical
+#df.clean$PROGRAM.YEAR2 = revalue(df.clean$PROGRAM.YEAR, c("2016" = "1", "2017" = "2", "2018" = "3", "2019" = "4"))
+df.clean <- df.clean %>%
+          mutate(PROPERTY.TYPE2 = case_when(PROPERTY.TYPE == "Multifamily Housing" ~ 1,
+                                             PROPERTY.TYPE == "Office" ~ 2,
+                                             TRUE ~ 0))
+df.clean$LADBS.Building.Category2 = revalue(df.clean$LADBS.Building.Category, c("7,500 to 14,999 sqft (CITY OWNED BUILDING)" = "7,500 to 14,999 sqft", "15,000 to 19,999 sqft (CITY OWNED BUILDING)" = "15,000 to 19,999 sqft", "20,000 to 49,999 sqft" = "20,000 to 49,999 sqft", "20,000 to 49,999 sqft (CITY OWNED BUILDINGS)" = "20,000 to 49,999 sqft", "50,000 to 99,999 sqft" = "50,000 to 99,999 sqft", "50,000 to 99,999 sqft (CITY OWNED BUILDINGS)" = "50,000 to 99,999 sqft", "100,000+ sqft" = "100,000+ sqft", "100,000+ sqft (CITY OWNED BUILDINGS)" = "100,000+ sqft"))
+df.clean$LADBS.Building.Category3 = revalue(df.clean$LADBS.Building.Category, c("100,000+ sqft" = "noncity-owned", "20,000 to 49,999 sqft" = "noncity-owned", "50,000 to 99,999 sqft" = "noncity-owned", "100,000+ sqft (CITY OWNED BUILDINGS)" = "city-owned", "15,000 to 19,999 sqft (CITY OWNED BUILDING)" = "city-owned", "20,000 to 49,999 sqft (CITY OWNED BUILDINGS)" = "city-owned", "50,000 to 99,999 sqft (CITY OWNED BUILDINGS)" = "city-owned", "7,500 to 14,999 sqft (CITY OWNED BUILDING)" = "city-owned"))
+
+# Select the distinct EBEWE zip codes 
+EBEWE_zip <- subset(df.clean, select = c(zip))
+EBEWE_zip_dist <- distinct(EBEWE_zip)
+
+# Merge the distinct EBEWE zip codes with the CalEnviroScore zip codes (SB535)
+disad_zip_merged <- merge(x=EBEWE_zip_dist,y=SB535, by="zip")
+
+# Merge the common zip codes with the EBEWE data set
+EBEWE_merged <- merge(x=df.clean,y=disad_zip_merged, by="zip")
+
+View(EBEWE_merged)
+```
+
+# regression model before transformation
+```{r}
+fit1 = lm(TOTAL.WATER.USE..kgal. ~ CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e. + COMPLIANCE.STATUS + ENERGY.STAR.SCORE + GROSS.BUILDING.FLOOR.AREA..ft.. + PROGRAM.YEAR + PROPERTY.TYPE2 + SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. + Source.EUI..kBtu.ft.. + WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. + WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. +  LADBS.Building.Category2 + LADBS.Building.Category3 + disadvantaged_zip, data = EBEWE_merged)
+summary(fit1)
+```
+
+# mallows cp on untransformed
+```{r}
+library(car)
+library(leaps)
+
+Mallowsfit =regsubsets(TOTAL.WATER.USE..kgal. ~ CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e. + COMPLIANCE.STATUS + ENERGY.STAR.SCORE + GROSS.BUILDING.FLOOR.AREA..ft.. + PROGRAM.YEAR + PROPERTY.TYPE2 + SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. + Source.EUI..kBtu.ft.. + WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. + WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. +  LADBS.Building.Category2 + LADBS.Building.Category3 + disadvantaged_zip, data = EBEWE_merged, nbest=2)
+subsets(Mallowsfit,statistic="cp",legend=F,main="Mallows CP",col="steelblue4", xlim = c(-5, 16), ylim = c(0, 0))
+```
+
+# regression model 2 from mallows cp
+```{r}
+fit2 = lm(TOTAL.WATER.USE..kgal. ~ CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e. + COMPLIANCE.STATUS + ENERGY.STAR.SCORE + PROGRAM.YEAR + LADBS.Building.Category2 + LADBS.Building.Category3, data = df.clean)
+summary(fit2) #this is the model mallows cp suggested but let's stick with fit1 for now
+```
+
+# checking for variable transformation
+```{r}
+library(car)
+
+symbox(~TOTAL.WATER.USE..kgal., data = EBEWE_merged) 
+EBEWE_merged <- EBEWE_merged[EBEWE_merged$TOTAL.WATER.USE..kgal. != 0, ] #Removing the observations with value 0
+summary(powerTransform(TOTAL.WATER.USE..kgal. ~ 1, data=EBEWE_merged)) #conclude we will transform to -1 power
+
+symbox(~CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e., data = EBEWE_merged) 
+EBEWE_merged <- EBEWE_merged[EBEWE_merged$CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e. != 0, ] #Removing the observations with value 0
+summary(powerTransform(CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e. ~ 1, data=EBEWE_merged)) #conclude we will not transform
+
+symbox(~X..DIFFERENCE.FROM.NATIONAL.MEDIAN.SOURCE.EUI, data = EBEWE_merged) 
+symbox(~X..DIFFERENCE.FROM.NATIONAL.MEDIAN.SITE.EUI, data = EBEWE_merged)
+
+symbox(~ENERGY.STAR.SCORE, data = EBEWE_merged) 
+EBEWE_merged <- EBEWE_merged[EBEWE_merged$ENERGY.STAR.SCORE != 0, ] #Removing the observations with value 0
+summary(powerTransform(ENERGY.STAR.SCORE ~ 1, data=EBEWE_merged)) #conclude we will not transform
+
+symbox(~GROSS.BUILDING.FLOOR.AREA..ft.., data = EBEWE_merged)
+EBEWE_merged <- EBEWE_merged[EBEWE_merged$GROSS.BUILDING.FLOOR.AREA..ft.. != 0, ] #Removing the observations with value 0
+summary(powerTransform(GROSS.BUILDING.FLOOR.AREA..ft.. ~ 1, data=EBEWE_merged)) #transform to log
+
+symbox(~SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.., data = EBEWE_merged)
+EBEWE_merged <- EBEWE_merged[EBEWE_merged$SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. != 0, ] #Removing the observations with value 0
+summary(powerTransform(SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. ~ 1, data=EBEWE_merged)) #transform to log
+
+symbox(~Source.EUI..kBtu.ft.., data = EBEWE_merged)
+EBEWE_merged <- EBEWE_merged[EBEWE_merged$Source.EUI..kBtu.ft.. != 0, ] #Removing the observations with value 0
+summary(powerTransform(Source.EUI..kBtu.ft.. ~ 1, data=EBEWE_merged)) #transform to log
+
+symbox(~WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.., data = EBEWE_merged)
+EBEWE_merged <- EBEWE_merged[EBEWE_merged$WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. != 0, ] #Removing the observations with value 0
+summary(powerTransform(WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. ~ 1, data=EBEWE_merged)) #transform to log
+
+symbox(~WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.., data = EBEWE_merged)
+EBEWE_merged <- EBEWE_merged[EBEWE_merged$WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. != 0, ] #Removing the observations with value 0
+summary(powerTransform(WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.. ~ 1, data=EBEWE_merged)) #transform to log
+```
+
+# transforming variables
+```{r}
+TOTAL.WATER.USE..kgal.2 <- bcPower(EBEWE_merged$TOTAL.WATER.USE..kgal., 0)
+CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e.2 <- bcPower(EBEWE_merged$CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e., 0)
+GROSS.BUILDING.FLOOR.AREA..ft..2 <- bcPower(EBEWE_merged$GROSS.BUILDING.FLOOR.AREA..ft.., 0)
+SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 <- bcPower(EBEWE_merged$SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.., 0)
+Source.EUI..kBtu.ft..2 <- bcPower(EBEWE_merged$Source.EUI..kBtu.ft.., 0)
+WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 <- bcPower(EBEWE_merged$WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.., 0)
+WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 <- bcPower(EBEWE_merged$WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft.., 0)
+
+EBEWE_merged <- cbind(EBEWE_merged, TOTAL.WATER.USE..kgal.2, CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e.2, GROSS.BUILDING.FLOOR.AREA..ft..2, SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2, Source.EUI..kBtu.ft..2, WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2, WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2)
+head(EBEWE_merged)
+
+fit3 = lm(TOTAL.WATER.USE..kgal.2 ~ CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e.2 + COMPLIANCE.STATUS + ENERGY.STAR.SCORE + GROSS.BUILDING.FLOOR.AREA..ft..2 + PROGRAM.YEAR + PROPERTY.TYPE2 + SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 + Source.EUI..kBtu.ft..2 + WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 + WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 +  LADBS.Building.Category2 + LADBS.Building.Category3 + disadvantaged_zip, data = as.data.frame(EBEWE_merged))
+summary(fit3)
+plot(fit3)
+
+
+AIC(fit1, fit2, fit3)
+BIC(fit1, fit2, fit3)
+```
+Looks like our fit 3 is the best model right now. 
+
+# mallows cp(shows nothing)
+```{r}
+library(leaps)
+
+Mallowsfit =regsubsets(TOTAL.WATER.USE..kgal.2 ~ CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e. + COMPLIANCE.STATUS + ENERGY.STAR.SCORE + GROSS.BUILDING.FLOOR.AREA..ft..2 + PROGRAM.YEAR + PROPERTY.TYPE2 + SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 + Source.EUI..kBtu.ft..2 + WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 + WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 +  LADBS.Building.Category2 + LADBS.Building.Category3 + disadvantaged_zip, data = EBEWE_merged, nbest=2)
+subsets(Mallowsfit,statistic="cp",legend=F,main="Mallows CP",col="steelblue4")
+
+vif(fit3)
+```
+vif shows we might want to remove CO2, site energy intensity, source intensity, weather normalized site, weather normalized source.
+
+# another mdodel with the suggested removed variables from vif in fit3 (includes compliance, star score, gross floor area, program year, property type, source energy, ladbs, disadvantaged zip)
+```{r}
+fit4 = lm(TOTAL.WATER.USE..kgal.2 ~ COMPLIANCE.STATUS + ENERGY.STAR.SCORE + GROSS.BUILDING.FLOOR.AREA..ft..2 + PROGRAM.YEAR + PROPERTY.TYPE2 +  Source.EUI..kBtu.ft..2 + LADBS.Building.Category2 + LADBS.Building.Category3 + disadvantaged_zip, data = EBEWE_merged)
+summary(fit4)
+vif(fit4)
+```
+
+# new model with the removed insignificant vars from fit4
+```{r}
+fit5 = lm(TOTAL.WATER.USE..kgal.2 ~ COMPLIANCE.STATUS + GROSS.BUILDING.FLOOR.AREA..ft..2 + PROPERTY.TYPE2 + Source.EUI..kBtu.ft..2 + LADBS.Building.Category3 + disadvantaged_zip, data = EBEWE_merged)
+summary(fit5)
+```
+
+# new model
+```{r}
+fit6 = lm(TOTAL.WATER.USE..kgal.2 ~ CARBON.DIOXIDE.EMISSIONS..Metric.Ton.CO2e.2 + COMPLIANCE.STATUS + ENERGY.STAR.SCORE + GROSS.BUILDING.FLOOR.AREA..ft..2 + NUMBER.OF.BUILDINGS + PROGRAM.YEAR + PROPERTY.TYPE2 + SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 + Source.EUI..kBtu.ft..2 + WEATHER.NORMALIZED.SITE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 + WEATHER.NORMALIZED.SOURCE.ENERGY.USE.INTENSITY..EUI...kBtu.ft..2 + LADBS.Building.Category2 + LADBS.Building.Category3 + disadvantaged_zip, data = EBEWE_merged)
+summary(fit6)
+
+residualPlots(fit6,type = "rstandard")
+residualPlots(fit6,type = "rstudent")
+residualPlots(fit6)
+
+vif(fit6)
+```
+
+# model 6 with the removed multicollinear variables from vif(fit6) - removed program year, site energy, source energy, weather site, and weather source
+```{r}
+fit7 = lm(TOTAL.WATER.USE..kgal.2 ~  COMPLIANCE.STATUS + GROSS.BUILDING.FLOOR.AREA..ft..2 + NUMBER.OF.BUILDINGS + PROPERTY.TYPE2 + Source.EUI..kBtu.ft..2 + LADBS.Building.Category2  + LADBS.Building.Category3 + disadvantaged_zip, data = EBEWE_merged)
+summary(fit7)
+vif(fit7)
+
+residualPlots(fit7,type = "rstandard")
+residualPlots(fit7,type = "rstudent")
+residualPlots(fit7)
+```
+
+```{r}
+AIC(fit1, fit2, fit3, fit4, fit5, fit6, fit7)
+BIC(fit1, fit2, fit3, fit4, fit5, fit6, fit7)
+```
+
+
+
+
